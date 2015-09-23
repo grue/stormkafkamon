@@ -9,7 +9,8 @@ install_requires = [
     'argparse',
     'requests',
     'python-dateutil',
-    'kafka-python'
+    'kafka-python',
+    'msgpack-python',
 ]
 
 setuptools.setup(

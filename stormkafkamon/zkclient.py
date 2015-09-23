@@ -72,10 +72,18 @@ class ZkClient:
         try:
             for c in self.client.get_children(spout_root):
                 partitions = []
-                for p in self.client.get_children(self._zjoin([spout_root, c])):
-                    j = json.loads(self.client.get(self._zjoin([spout_root, c, p]))[0])
-                    if j['topology']['name'] == topology:
-                        partitions.append(j)
+
+                # Crowsnest uses a different spout_root than this expects, which has one less level of depth
+                j = json.loads(self.client.get(self._zjoin([spout_root, c]))[0])
+                if j['topology']['name'] == topology:
+                    partitions.append(j)
+
+                # [TODO] - Introduce some flexibility to support both the original and our discovery methods
+                # for p in self.client.get_children(self._zjoin([spout_root, c])):
+                #     j = json.loads(self.client.get(self._zjoin([spout_root, c, p]))[0])
+                #     if j['topology']['name'] == topology:
+                #         partitions.append(j)
+
                 s.append(ZkKafkaSpout._make([c, partitions]))
         except NoNodeError:
             raise ZkError('Kafka Spout nodes do not exist in Zookeeper')

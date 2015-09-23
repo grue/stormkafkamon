@@ -4,7 +4,10 @@
 import logging
 import simplejson as json
 from datetime import datetime
+import dateutil.parser
 from dateutil.relativedelta import relativedelta
+from dateutil.tz import tzutc
+import msgpack
 
 class NullHandler(logging.Handler):
     def emit(self, record):
@@ -70,6 +73,10 @@ def process(spouts, in_array, field_name, array_index=0):
         responses = k.send_fetch_request([FetchRequest(p['topic'].encode('utf-8'), p['partition'], current, buffer_size)])
         for resp in responses:
             for message in resp.messages:
+                # [TODO] - make this flexible to work with json or msgpack
+                # Crowsnest uses msgpack+base64 and no array, so we'll go directly for the value
+                return msgpack.unpackb(base64.b64decode(message.message.value))[field_name]
+
                 if in_array:
                     return json.loads(message.message.value)[array_index][field_name]
                 else:
@@ -109,7 +116,8 @@ def process(spouts, in_array, field_name, array_index=0):
             total_delta = total_delta + delta
 
             if delta != 0 and field_name:
-                timestamp = get_timestamp(k, p, current)
+                # [TODO] - This transformation from timestamp string to timestamp int should probably be moved to get_timestamp()
+                timestamp = int((dateutil.parser.parse(get_timestamp(k, p, current)) - datetime(1970, 1, 1, tzinfo=tzutc())).total_seconds())
                 lag = relativedelta(datetime.now(), datetime.fromtimestamp(timestamp/1000.0))
             else:
                 timestamp = now()
