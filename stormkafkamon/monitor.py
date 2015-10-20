@@ -10,20 +10,24 @@ import datetime
 from zkclient import ZkClient, ZkError
 from processor import process, ProcessorError
 
+
 def sizeof_fmt(num):
-    for x in [' bytes','KB','MB','GB']:
+    for x in [' bytes', 'KB', 'MB', 'GB']:
         if num < 1024.0:
             return "%3.1f%s" % (num, x)
         num /= 1024.0
     return "%3.1f%s" % (num, 'TB')
 
+
 def null_fmt(num):
     return num
+
 
 def time_fmt(d):
     attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
     human_readable = lambda delta: ['%d %s' % (getattr(delta, attr), getattr(delta, attr) > 1 and attr or attr[:-1]) for attr in attrs if getattr(delta, attr)]
     return human_readable(d) or ['0 seconds']
+
 
 def display(summary, friendly=False, include_lag=False):
     if friendly:
@@ -40,7 +44,7 @@ def display(summary, friendly=False, include_lag=False):
     for p in summary.partitions:
         fields = [p.broker, p.topic, p.partition, p.earliest, p.latest, fmt(p.depth), p.spout, p.current, fmt(p.delta)]
         if include_lag:
-            fields.extend([datetime.datetime.fromtimestamp(p.timestamp/1000.0), time_fmt(p.lag)[0]])
+            fields.extend([datetime.datetime.fromtimestamp(p.timestamp / 1000.0), time_fmt(p.lag)[0]])
         table.add_row(fields)
     print table.get_string(sortby='Broker')
     print
@@ -50,7 +54,8 @@ def display(summary, friendly=False, include_lag=False):
     print 'Total delta:             %s' % fmt(summary.total_delta)
     print 'Total lag:               %s' % time_fmt(summary.total_lag)[0]
 
-def post_json(endpoint, zk_data):
+
+def prep_for_json(zk_data):
     fields = ("broker", "topic", "partition", "earliest", "latest", "depth",
               "spout", "current", "delta")
     json_data = {"%s-%s" % (p.broker, p.partition):
@@ -62,16 +67,30 @@ def post_json(endpoint, zk_data):
              for fieldname in total_fields}
     total['partitions'] = len({p.partition for p in zk_data.partitions})
     total['brokers'] = len({p.broker for p in zk_data.partitions})
+    total['lag_seconds'] = zk_data.total_lag.seconds
     json_data['total'] = total
+
+    return json_data
+
+
+def post_json(endpoint, zk_data):
+    json_data = prep_for_json(zk_data)
     requests.post(endpoint, data=json.dumps(json_data))
+
+
+def display_json(zk_data):
+    json_data = prep_for_json(zk_data)
+    print json.dumps(json_data)
 
 ######################################################################
 
+
 def true_or_false_option(option):
-    if option == None:
+    if option is None:
         return False
     else:
         return True
+
 
 def read_args():
     parser = argparse.ArgumentParser(
@@ -88,11 +107,14 @@ def read_args():
         help='Show friendlier data')
     parser.add_argument('--postjson', type=str,
         help='endpoint to post json data to')
+    parser.add_argument('--displayjson', action='store_const', const=True,
+        help='display summary to console as json')
     parser.add_argument('--field_name', type=str,
         help='The name of the field containing the timestamp in the Kafka JSON message')
     parser.add_argument('--in_array', type=bool, default=False,
         help='Indicate that the Kafka messages are wrapped in an array')
     return parser.parse_args()
+
 
 def main():
     options = read_args()
@@ -111,10 +133,13 @@ def main():
     else:
         if options.postjson:
             post_json(options.postjson, zk_data)
+        elif options.displayjson:
+            display_json(zk_data)
         else:
-            display(zk_data, true_or_false_option(options.friendly), options.field_name != None)
+            display(zk_data, true_or_false_option(options.friendly), options.field_name is not None)
 
     return 0
 
 if __name__ == '__main__':
     sys.exit(main())
+
